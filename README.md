@@ -127,10 +127,10 @@ python -m venv .venv
 # source .venv/bin/activate
 pip install uv
 uv sync 
-uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload
+uvicorn app.main:app --host 0.0.0.0 --port 8091 --reload
 ```
 
-Backend base URL: `http://127.0.0.1:8080`
+Backend base URL: `http://127.0.0.1:8091`
 
 ### Frontend
 
@@ -172,8 +172,8 @@ The backend reads environment variables via `pydantic-settings` (`.env` supporte
 Set in `frontend/.env` (or `.env.local`):
 
 ```env
-VITE_API_HTTP_BASE=http://127.0.0.1:8080
-VITE_API_WS_BASE=ws://127.0.0.1:8080
+VITE_API_HTTP_BASE=http://127.0.0.1:8091
+VITE_API_WS_BASE=ws://127.0.0.1:8091
 VITE_API_PREFIX=/api/v1
 ```
 

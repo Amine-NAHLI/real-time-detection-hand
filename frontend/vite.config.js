@@ -8,20 +8,20 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/health': {
-        target: 'http://127.0.0.1:8080',
+        target: 'http://127.0.0.1:8091',
         changeOrigin: true,
       },
-      '/predict': {
-        target: 'http://127.0.0.1:8080',
+      '/api/v1/predict/': {
+        target: 'http://127.0.0.1:8091',
         changeOrigin: true,
       },
-      '/ws': {
-        target: 'ws://127.0.0.1:8080',
+      '/ws/': {
+        target: 'ws://127.0.0.1:8091',
         ws: true,
         changeOrigin: true,
       },
-      '/api': {
-        target: 'http://127.0.0.1:8080',
+      '/weights/': {
+        target: 'http://127.0.0.1:8091',
         ws: true,
         changeOrigin: true,
       },

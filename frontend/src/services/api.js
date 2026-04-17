@@ -1,6 +1,6 @@
 import { logError } from './errorLogger'
 
-const API_BASE = import.meta.env.VITE_API_HTTP_BASE || 'http://127.0.0.1:8080'
+const API_BASE = import.meta.env.VITE_API_HTTP_BASE || 'http://127.0.0.1:8091'
 const API_PREFIX = import.meta.env.VITE_API_PREFIX || '/api/v1'
 
 function withPrefix(path) {

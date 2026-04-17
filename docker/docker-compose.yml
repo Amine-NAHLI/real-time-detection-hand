@@ -6,7 +6,7 @@ services:
     container_name: asl-backend
     gpus: all
     ports:
-      - "8080:8080"
+      - "8091:8091"
     environment:
       CORS_ORIGINS: '["http://localhost:5173","http://127.0.0.1:5173"]'
 

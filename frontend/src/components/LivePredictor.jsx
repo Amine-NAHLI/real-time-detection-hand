@@ -205,7 +205,7 @@ function LivePredictor() {
       const vision = await FilesetResolver.forVisionTasks(
         'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm'
       )
-      const apiBase = import.meta.env.VITE_API_HTTP_BASE || 'http://127.0.0.1:8080'
+      const apiBase = import.meta.env.VITE_API_HTTP_BASE || 'http://127.0.0.1:8091'
       const modelUrl = `${apiBase.replace(/\/$/, '')}/weights/hand_landmarker.task`
       landmarkerRef.current = await HandLandmarker.createFromOptions(vision, {
         baseOptions: {
