@@ -24,6 +24,7 @@ async def lifespan(app: FastAPI):
 
     model_bundle = load_model_bundle(settings.weights_dir)
     hands = HandsService(
+        weights_path=str(settings.weights_dir / "hand_landmarker.task"),
         max_num_hands=settings.max_num_hands,
         min_detection_confidence=settings.min_detection_confidence,
         min_tracking_confidence=settings.min_tracking_confidence,

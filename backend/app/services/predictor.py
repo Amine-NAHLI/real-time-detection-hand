@@ -46,10 +46,10 @@ class Predictor:
         confidence_threshold: float | None = None,
     ) -> tuple[str, float, bool, list[dict[str, float]] | None]:
         result = self.hands.process(rgb)
-        if not result.multi_hand_landmarks:
+        if not result.hand_landmarks:
             return 'nothing', 0.0, False, None
 
-        lm = result.multi_hand_landmarks[0].landmark
+        lm = result.hand_landmarks[0]
         pts = np.array([[p.x, p.y, p.z] for p in lm], dtype=np.float32)
         pts_norm = normalize_landmarks(pts)
 
