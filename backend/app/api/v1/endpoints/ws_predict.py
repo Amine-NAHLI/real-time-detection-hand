@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 from pydantic import ValidationError
 
 from app.core.dependency import get_app_state
-from app.schemas.predict import WSFrameIn, WSFrameOut
+from app.schemas.predict import HandResult, WSFrameIn, WSFrameOut
 from app.services.smoothing import MajorityVoteSmoother
 from app.state import AppState
 from app.utils.image_io import base64_to_rgb, resize_rgb
@@ -51,7 +51,6 @@ async def ws_predict(websocket: WebSocket, state: AppState = Depends(get_app_sta
 
             b64 = payload.frame or payload.image
             if not b64:
-                # Allow control-only messages without a frame.
                 if payload.control:
                     continue
                 await websocket.send_json({'detail': 'Missing frame/image field'})
@@ -59,17 +58,19 @@ async def ws_predict(websocket: WebSocket, state: AppState = Depends(get_app_sta
 
             rgb = base64_to_rgb(b64)
             rgb = resize_rgb(rgb, state.settings.max_frame_size)
-            pred, confidence, hand_detected, landmarks = state.predictor.predict_rgb(
+            pred, confidence, hand_detected, landmarks, hands_out = state.predictor.predict_rgb(
                 rgb,
                 return_landmarks=send_landmarks,
                 confidence_threshold=confidence_threshold,
             )
             smooth_pred = smoother.push(pred)
+            hands = [HandResult.model_validate(h) for h in hands_out] if hands_out else None
             out = WSFrameOut(
                 pred=smooth_pred,
                 confidence=confidence,
                 hand_detected=hand_detected,
                 landmarks=landmarks,
+                hands=hands,
             )
             await websocket.send_text(out.model_dump_json())
     except WebSocketDisconnect:

@@ -4,7 +4,7 @@ import logging
 from fastapi import APIRouter, Depends, File, UploadFile
 
 from app.core.dependency import get_app_state
-from app.schemas.predict import PredictResponse
+from app.schemas.predict import HandResult, PredictResponse
 from app.state import AppState
 from app.utils.image_io import bytes_to_rgb, resize_rgb
 
@@ -13,15 +13,29 @@ logger = logging.getLogger("app.http")
 
 
 @router.post('/predict/image', response_model=PredictResponse)
-async def predict_image(image: UploadFile = File(...), state: AppState = Depends(get_app_state)) -> PredictResponse:
+async def predict_image(
+    image: UploadFile = File(...),
+    state: AppState = Depends(get_app_state),
+) -> PredictResponse:
     start = time.perf_counter()
     content = await image.read()
     rgb = bytes_to_rgb(content)
     rgb = resize_rgb(rgb, state.settings.max_frame_size)
-    pred, confidence, hand_detected, _ = state.predictor.predict_rgb(rgb)
+
+    pred, confidence, hand_detected, _, hands_out = state.predictor.predict_rgb(rgb)
+
+    # Only populate the `hands` field when multiple hands were detected so
+    # single-hand clients (that ignore unknown fields) are unaffected.
+    hands = [HandResult.model_validate(h) for h in hands_out] if hands_out else None
+
     duration_ms = round((time.perf_counter() - start) * 1000.0, 2)
     logger.info(
         "POST /api/v1/predict/image -> 200",
         extra={"extras": {"duration_ms": duration_ms}},
     )
-    return PredictResponse(pred=pred, confidence=confidence, hand_detected=hand_detected)
+    return PredictResponse(
+        pred=pred,
+        confidence=confidence,
+        hand_detected=hand_detected,
+        hands=hands,
+    )

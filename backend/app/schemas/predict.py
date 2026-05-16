@@ -13,10 +13,20 @@ class LandmarkPoint(BaseModel):
     z: float | None = None
 
 
+class HandResult(BaseModel):
+    pred: str
+    confidence: float = Field(ge=0.0, le=1.0)
+    hand_detected: bool = True
+    landmarks: list[LandmarkPoint] | None = None
+
+
 class PredictResponse(BaseModel):
     pred: str
     confidence: float = Field(ge=0.0, le=1.0)
     hand_detected: bool
+    # Multi-hand results; None when only one hand was detected or endpoint
+    # did not request it, so existing clients are unaffected.
+    hands: list[HandResult] | None = None
 
 
 class WSFrameIn(BaseModel):
@@ -30,3 +40,5 @@ class WSFrameOut(BaseModel):
     confidence: float = Field(ge=0.0, le=1.0)
     hand_detected: bool
     landmarks: list[LandmarkPoint] | None = None
+    # Per-hand breakdown; None when no hand was detected.
+    hands: list[HandResult] | None = None

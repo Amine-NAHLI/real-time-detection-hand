@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     preprocess_config_path: Path = BACKEND_DIR / "weights" / "preprocess.json"
     confidence_threshold: float = 0.55
 
-    max_num_hands: int = 1
+    max_num_hands: int = 2
     min_detection_confidence: float = 0.3
     min_tracking_confidence: float = 0.5
 
