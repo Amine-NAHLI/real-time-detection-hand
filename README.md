@@ -2,115 +2,157 @@
 
 Developed and maintained by **Amine NAHLI**.
 
-A high-performance American Sign Language (ASL) recognition system featuring a **FastAPI backend** and a **React + Vite frontend**. This system leverages **MediaPipe Tasks API** for hand landmarker detection and a custom **PyTorch MLP** for real-time sign classification.
-
-[![Python](https://img.shields.io/badge/Python-3.13+-blue.svg)](https://www.python.org/)
+[![Python](https://img.shields.io/badge/Python-3.11%20|%203.13-blue.svg)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.111+-009688.svg)](https://fastapi.tiangolo.com/)
-[![React](https://img.shields.io/badge/React-18.0+-61DAFB.svg)](https://reactjs.org/)
+[![Expo SDK](https://img.shields.io/badge/Expo_SDK-55.0-black.svg)](https://expo.dev/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
----
+## 📝 Description
+A high-performance American Sign Language (ASL) recognition system featuring a **FastAPI backend**, a **React + Vite frontend**, and a **cross-platform mobile app (Expo)**. This system leverages **MediaPipe Hands** for hand landmarker detection and a custom **PyTorch MLP** for real-time sign classification.
 
-## 🚀 Key Features
-
-- **Live Webcam Inference:** Real-time ASL prediction via optimized WebSocket streaming.
-- **Modern MediaPipe Integration:** Uses the latest `HandLandmarker` Tasks API for superior tracking stability (Python 3.13 compatible).
-- **Dual Mode Prediction:** Supports both live video streams and single image uploads.
-- **Low Latency:** Inference path optimized for real-time interaction (Majority-vote smoothing & frame throttling).
-- **Modern UI:** Responsive dashboard built with React and Vite.
+![Screenshot Placeholder](https://via.placeholder.com/800x400?text=ASL+Detection+Interface+Preview)
 
 ---
 
-## 🏗️ Architecture
-
-- **Backend:** FastAPI with pre-loaded TorchScript model, MediaPipe vision tasks, and WebSocket frame throttling.
-- **Frontend:** React application with real-time landmark overlay and smoothing logic.
-- **Inference Pipeline:** Image decoding -> Hand Detection (MediaPipe) -> Landmark Normalization -> MLP Classification (PyTorch) -> Confidence Gating.
-
----
-
-## ⚙️ Local Setup
-
-### Prerequisites
-
+## 🛠️ Prerequisites
+Ensure you have the following installed on your machine:
 - **Python 3.11 to 3.13**
-- **Node.js 20+**
-- A working webcam
+- **Node.js 20+** (LTS recommended)
+- **npm** or **yarn**
+- **Expo CLI** (`npm install -g expo-cli`)
+- **Git**
+- A working webcam (for Web) or a physical smartphone (for Mobile)
 
-### 1. Backend Setup
+---
 
+## 🚀 Installation — Step by Step
+
+### 1. Clone the Project
+```bash
+git clone https://github.com/Amine-NAHLI/real-time-detection-hand.git
+cd Real-time-ASL-Detection-from-Video-Image
+```
+
+### 2. Backend Setup
+The backend serves as the inference engine.
 ```bash
 cd backend
 python -m venv .venv
-# Windows
+
+# Activate environment
+# Windows:
 .venv\Scripts\activate
-# Install optimized dependencies
-python -m pip install -r requirements.txt
-# Launch on custom port 8091
-python -m uvicorn app.main:app --host 0.0.0.0 --port 8091 --reload
+# Mac/Linux:
+source .venv/bin/activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Launch the backend
+uvicorn app.main:app --host 0.0.0.0 --port 8091 --reload
 ```
+> [!IMPORTANT]
+> Ensure the model weights (e.g., `hand_landmarker.task`) are present in `backend/weights/`.
 
-_Backend API Docs: `http://localhost:8091/docs`_
+### 3. Mobile App (Expo)
+The mobile app can run in the browser, on an emulator, or on a physical device.
+```bash
+cd mobile
+npm install --legacy-peer-deps
+npx expo start
+```
+#### 🌐 Connecting to the Backend
+To connect your phone to the backend, they **MUST** be on the same WiFi network.
+1. Find your computer's local IP address:
+   - **Windows**: Run `ipconfig` (look for IPv4 Address).
+   - **Mac/Linux**: Run `ifconfig` or `ip addr`.
+2. Open the Mobile App.
+3. Go to **Settings** (⚙️ icon).
+4. Update the **Server IP** with your computer's IP (e.g., `192.168.1.15`).
+5. Set the **Port** to `8091`.
 
-### 2. Frontend Setup
+| Environment | Backend URL |
+| :--- | :--- |
+| **Web Browser** | `http://127.0.0.1:8091` |
+| **Android Emulator** | `http://10.0.2.2:8091` |
+| **Physical Device** | `http://<YOUR_LOCAL_IP>:8091` |
 
+### 4. Frontend Web (React + Vite)
+If you prefer the dedicated web dashboard:
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
-
-_Frontend URL: `http://localhost:5173`_
-
----
-
-## 🛠️ Configuration
-
-The project is pre-configured to communicate on port **8091**. You can adjust settings in the `.env` files.
-
-### Backend (`backend/.env`)
-
-| Variable               | Value                       |
-| :--------------------- | :-------------------------- |
-| `APP_NAME`             | ASL Detection API           |
-| `CORS_ORIGINS`         | `["http://localhost:5173"]` |
-| `CONFIDENCE_THRESHOLD` | `0.55`                      |
-
-### Frontend (`frontend/.env`)
-
-| Variable             | Value                   |
-| :------------------- | :---------------------- |
-| `VITE_API_HTTP_BASE` | `http://localhost:8091` |
-| `VITE_API_WS_BASE`   | `ws://localhost:8091`   |
+Accessible at: `http://localhost:5173`
 
 ---
 
-## 🧠 Supported Signs
+## ⚙️ Configuration
 
-The model currently recognizes:
+### Environment Variables
+Check the `.env.example` files in each directory:
+- `backend/.env.example`
+- `frontend/.env.example`
+- `mobile/config.js` (for mobile-specific constants)
 
-- **A-Z** (ASL Alphabet)
-- **space**, **del**, **nothing**
+### Port Settings
+- **Backend**: 8091 (Default)
+- **Frontend**: 5173
+- **Mobile (Expo)**: 8081
 
 ---
 
-## 🐳 Docker Deployment
+## 🎮 Usage
 
-The environment is containerized for easy deployment:
+### 🎥 Live Recognition
+- **Web**: Open the dashboard and allow camera access. Landmarks will appear over your hand.
+- **Mobile**: Tap "Grant Permission" and point the front camera at your hand.
 
-```bash
-docker compose -f docker/docker-compose.yml up --build
+### ⌨️ Text Construction (Mobile Feature)
+1. **Detection**: Hold a sign steadily for ~4 frames.
+2. **Accumulation**: The letter will be added to the top display.
+3. **Space/Delete**: Use specific signs (if trained) or the UI buttons to manage text.
+4. **Clear**: Use the 🗑️ icon to reset the detected text.
+
+---
+
+## 🏗️ Project Architecture
+```text
+.
+├── backend/        # FastAPI Server, PyTorch Logic, MediaPipe Services
+├── frontend/       # React + Vite Dashboard (Tailwind/CSS)
+├── mobile/         # Expo App (React Native)
+├── docker/         # Dockerfiles and Compose for deployment
+└── weights/        # AI Model files (.task, .pth)
 ```
 
 ---
 
-## 👤 Author
-
-**Amine NAHLI**
-
-- GitHub: [Amine-NAHLI](https://github.com/Amine-NAHLI)
-- Project Repository: [real-time-detection-hand](https://github.com/Amine-NAHLI/real-time-detection-hand)
+## 🧪 Technologies
+- **Backend**: FastAPI, MediaPipe Hands, PyTorch 2.4+, OpenCV.
+- **Frontend**: React 18, Vite, Reconnecting WebSocket.
+- **Mobile**: Expo SDK 55, React Native, Lucide Icons.
+- **Infrastructure**: Docker, Docker Compose.
 
 ---
 
-_License: MIT. Credits to original researchers and data providers._
+## 🔍 Troubleshooting
+
+- **Connection Refused**: Ensure the backend is running on `0.0.0.0:8091`.
+- **Camera Not Working**: Check browser permissions or Expo camera permissions in settings.
+- **WebSocket Disconnects**: Ensure your phone and PC are on the same WiFi network and the IP address in settings is correct.
+- **Missing Weights**: If the server fails to start, verify that `backend/weights/hand_landmarker.task` exists.
+
+---
+
+## 🤝 Contributing
+1. Fork the Project.
+2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`).
+3. Commit your Changes (`git commit -m 'Add some AmazingFeature'`).
+4. Push to the Branch (`git push origin feature/AmazingFeature`).
+5. Open a Pull Request.
+
+---
+
+_License: MIT. Developed with ❤️ by Amine NAHLI._
