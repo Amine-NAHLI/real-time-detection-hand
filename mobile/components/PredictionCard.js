@@ -2,18 +2,30 @@ import React from 'react';
 import { StyleSheet, View, Text } from 'react-native';
 import { Zap } from 'lucide-react-native';
 
-export const PredictionCard = ({ prediction, confidence }) => {
+export const PredictionCard = ({ prediction, confidence, handDetected }) => {
   return (
     <View style={styles.card}>
       <View style={styles.labelRow}>
         <Zap size={16} color="#6366f1" fill="#6366f1" />
         <Text style={styles.label}>LIVE RECOGNITION</Text>
       </View>
-      
+
       <Text style={styles.predictionText}>
         {prediction === 'nothing' ? '...' : prediction.toUpperCase()}
       </Text>
-      
+
+      <View style={styles.handStatusRow}>
+        <View
+          style={[
+            styles.handDot,
+            { backgroundColor: handDetected ? '#10b981' : '#ef4444' },
+          ]}
+        />
+        <Text style={styles.handStatusText}>
+          {handDetected ? 'Hand Detected' : 'No Hand'}
+        </Text>
+      </View>
+
       <View style={styles.confidenceRow}>
         <View style={styles.barBg}>
           <View style={[styles.barFill, { width: `${confidence * 100}%` }]} />
@@ -59,11 +71,27 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 0, height: 4 },
     textShadowRadius: 10,
   },
+  handStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  handDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    marginRight: 6,
+  },
+  handStatusText: {
+    color: '#94a3b8',
+    fontSize: 12,
+    fontWeight: '600',
+  },
   confidenceRow: {
     width: '100%',
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 16,
+    marginTop: 4,
   },
   barBg: {
     flex: 1,

@@ -5,16 +5,44 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
-    "assetBundlePatterns": [
-      "**/*"
-    ],
-    "ios": {
-      "supportsTablet": true
-    },
-    "android": {
+    "splash": {
       "backgroundColor": "#0f172a"
     },
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSCameraUsageDescription": "Required for real-time ASL hand sign detection.",
+        "NSPhotoLibraryUsageDescription": "Required to select images for ASL sign classification.",
+        "NSMicrophoneUsageDescription": "Required for camera access on iOS."
+      }
+    },
+    "android": {
+      "backgroundColor": "#0f172a",
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE"
+      ]
+    },
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Required for real-time ASL hand sign detection."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Required to select images for ASL sign classification."
+        }
+      ]
+    ],
     "web": {
+      "bundler": "metro",
+      "output": "single",
+      "backgroundColor": "#0f172a"
     }
   }
 }

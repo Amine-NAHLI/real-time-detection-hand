@@ -1,23 +1,32 @@
-import React, { useState } from 'react';
-import { StyleSheet, View, Text, TextInput, TouchableOpacity, Modal, BlurView } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { StyleSheet, View, Text, TextInput, TouchableOpacity, Modal } from 'react-native';
+import { BlurView } from 'expo-blur';
 import { X, Server, Globe } from 'lucide-react-native';
 
 export const SettingsModal = ({ visible, onClose, config, onSave }) => {
   const [ip, setIp] = useState(config.SERVER_IP);
   const [port, setPort] = useState(config.PORT);
 
+  // Sync local state whenever the modal opens or config changes externally
+  useEffect(() => {
+    if (visible) {
+      setIp(config.SERVER_IP);
+      setPort(config.PORT);
+    }
+  }, [visible, config]);
+
   const handleSave = () => {
-    onSave({ SERVER_IP: ip, PORT: port });
+    onSave({ SERVER_IP: ip.trim(), PORT: port.trim() });
     onClose();
   };
 
   return (
-    <Modal visible={visible} transparent animationType="fade">
-      <View style={styles.overlay}>
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <BlurView intensity={60} tint="dark" style={styles.overlay}>
         <View style={styles.content}>
           <View style={styles.header}>
             <Text style={styles.title}>Network Settings</Text>
-            <TouchableOpacity onPress={onClose}>
+            <TouchableOpacity onPress={onClose} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
               <X color="#94a3b8" size={24} />
             </TouchableOpacity>
           </View>
@@ -33,6 +42,9 @@ export const SettingsModal = ({ visible, onClose, config, onSave }) => {
               onChangeText={setIp}
               placeholder="192.168.1.XX"
               placeholderTextColor="#475569"
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="decimal-pad"
             />
           </View>
 
@@ -55,7 +67,7 @@ export const SettingsModal = ({ visible, onClose, config, onSave }) => {
             <Text style={styles.saveButtonText}>Apply Changes</Text>
           </TouchableOpacity>
         </View>
-      </View>
+      </BlurView>
     </Modal>
   );
 };
@@ -63,7 +75,6 @@ export const SettingsModal = ({ visible, onClose, config, onSave }) => {
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.8)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
