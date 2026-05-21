@@ -2,7 +2,7 @@ import React from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, ScrollView } from 'react-native';
 import { Trash2, Type } from 'lucide-react-native';
 
-export const WordDisplay = ({ text, onClear }) => {
+export const WordDisplay = ({ text, onClear, onTranslate }) => {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -10,9 +10,20 @@ export const WordDisplay = ({ text, onClear }) => {
           <Type size={16} color="#6366f1" />
           <Text style={styles.title}>DETECTED TEXT</Text>
         </View>
-        <TouchableOpacity onPress={onClear} style={styles.clearButton}>
-          <Trash2 size={16} color="#ef4444" />
-        </TouchableOpacity>
+        <View style={styles.headerActions}>
+          {onTranslate && (
+            <TouchableOpacity
+              onPress={() => onTranslate(text)}
+              style={styles.translateButton}
+              disabled={!text}
+            >
+              <Text style={[styles.translateText, !text && styles.translateTextDisabled]}>ترجمة</Text>
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity onPress={onClear} style={styles.clearButton}>
+            <Trash2 size={16} color="#ef4444" />
+          </TouchableOpacity>
+        </View>
       </View>
       
       <ScrollView 
@@ -55,6 +66,27 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 1.5,
     marginLeft: 6,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  translateButton: {
+    backgroundColor: 'rgba(99,102,241,0.15)',
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(99,102,241,0.4)',
+    marginRight: 8,
+  },
+  translateText: {
+    color: '#a5b4fc',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  translateTextDisabled: {
+    color: '#334155',
   },
   clearButton: {
     padding: 4,

@@ -3,6 +3,7 @@ import {
   StyleSheet,
   View,
   Text,
+  TextInput,
   TouchableOpacity,
   SafeAreaView,
   ActivityIndicator,
@@ -12,6 +13,7 @@ import {
   Platform,
   Switch,
   Share,
+  Animated,
 } from 'react-native';
 import { useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
@@ -24,7 +26,9 @@ import { useASLWebSocket, WS_STATUS } from './hooks/useASLWebSocket';
 import { PredictionCard } from './components/PredictionCard';
 import { SettingsModal } from './components/SettingsModal';
 import { WordDisplay } from './components/WordDisplay';
+import { TranslationModal } from './components/TranslationModal';
 import CameraBackground from './components/CameraBackground';
+import { translateToArabic } from './services/translationService';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -878,6 +882,21 @@ export default function App() {
   const stabilityCounter = useRef(0);
   const lastPrediction = useRef(null);
 
+  // Translation
+  const [translationVisible, setTranslationVisible] = useState(false);
+  const [translationOriginal, setTranslationOriginal] = useState('');
+  const [translationResult, setTranslationResult] = useState('');
+  const [isTranslating, setIsTranslating] = useState(false);
+  const [translationError, setTranslationError] = useState(false);
+  const [manualInput, setManualInput] = useState('');
+
+  // Speech-to-Text (web only)
+  const [isListening, setIsListening] = useState(false);
+  const isListeningRef = useRef(false);
+  const recognitionRef = useRef(null);
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const pulseLoopRef = useRef(null);
+
   // Image upload (shared)
   const [isUploading, setIsUploading] = useState(false);
   const [uploadResult, setUploadResult] = useState(null);
@@ -1132,7 +1151,7 @@ export default function App() {
       if (!resp.ok) throw new Error(`Server error (${resp.status})`);
       setUploadResult(await resp.json());
     } catch (err) {
-      Alert.alert('Upload Failed', err.message || 'Could not reach the server.');
+      Alert.alert('Erreur de détection', err.message || 'Impossible de contacter le serveur.');
       setShowUploadModal(false);
     } finally {
       setIsUploading(false);
@@ -1159,6 +1178,86 @@ export default function App() {
       await Share.share({ message: finalText });
     } catch {}
   };
+
+  const handleTranslate = useCallback(async (text) => {
+    if (!text?.trim()) return;
+    setTranslationOriginal(text);
+    setTranslationResult('');
+    setTranslationError(false);
+    setIsTranslating(true);
+    setTranslationVisible(true);
+    try {
+      const result = await translateToArabic(text.trim());
+      setTranslationResult(result);
+    } catch {
+      setTranslationError(true);
+    } finally {
+      setIsTranslating(false);
+    }
+  }, []);
+
+  const handleSpeechToText = useCallback(() => {
+    if (Platform.OS !== 'web') {
+      Alert.alert('Non supporté sur cet appareil');
+      return;
+    }
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      Alert.alert('Non supporté sur cet appareil');
+      return;
+    }
+
+    // Second press while listening → stop early
+    if (isListeningRef.current) {
+      recognitionRef.current?.stop();
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'en-US';
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+    recognitionRef.current = recognition;
+
+    recognition.onstart = () => {
+      isListeningRef.current = true;
+      setIsListening(true);
+      pulseLoopRef.current = Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, { toValue: 1.2, duration: 500, useNativeDriver: true }),
+          Animated.timing(pulseAnim, { toValue: 1.0, duration: 500, useNativeDriver: true }),
+        ])
+      );
+      pulseLoopRef.current.start();
+    };
+
+    recognition.onresult = (event) => {
+      setManualInput(event.results[0][0].transcript);
+    };
+
+    const cleanupRecognition = () => {
+      isListeningRef.current = false;
+      setIsListening(false);
+      pulseLoopRef.current?.stop();
+      pulseLoopRef.current = null;
+      pulseAnim.setValue(1);
+      recognitionRef.current = null;
+    };
+
+    recognition.onerror = cleanupRecognition;
+    recognition.onend = cleanupRecognition;
+
+    recognition.start();
+  }, [pulseAnim]);
+
+  // Stop any in-progress recognition on unmount
+  useEffect(() => {
+    return () => {
+      recognitionRef.current?.stop();
+      pulseLoopRef.current?.stop();
+    };
+  }, []);
 
   // ─── Loading / Permission gates ───────────────────────────────────────────
 
@@ -1267,7 +1366,11 @@ export default function App() {
           )}
 
           <View style={styles.wordSection}>
-            <WordDisplay text={accumulatedText} onClear={() => setAccumulatedText('')} />
+            <WordDisplay
+              text={accumulatedText}
+              onClear={() => setAccumulatedText('')}
+              onTranslate={handleTranslate}
+            />
           </View>
 
           <View style={styles.finalTextSection}>
@@ -1278,6 +1381,13 @@ export default function App() {
                   <Text style={styles.finalTextTitle}>TEXTE DÉTECTÉ</Text>
                 </View>
                 <View style={styles.finalTextHeaderBtns}>
+                  <TouchableOpacity
+                    style={[styles.finalTextTranslateBtn, !accumulatedText && { opacity: 0.4 }]}
+                    onPress={() => handleTranslate(accumulatedText)}
+                    disabled={!accumulatedText}
+                  >
+                    <Text style={styles.finalTextTranslateTxt}>ترجمة</Text>
+                  </TouchableOpacity>
                   <TouchableOpacity
                     style={styles.finalTextActionBtn}
                     onPress={handleFinalTextCopy}
@@ -1302,6 +1412,33 @@ export default function App() {
 
           <View style={styles.mainContent}>
             <PredictionCard prediction={prediction} confidence={confidence} handDetected={handDetected} />
+          </View>
+
+          <View style={styles.manualInputRow}>
+            <TextInput
+              style={styles.manualInput}
+              value={manualInput}
+              onChangeText={setManualInput}
+              placeholder={isListening ? 'Écoute...' : 'Saisir du texte...'}
+              placeholderTextColor={isListening ? '#e74c3c' : '#6b7280'}
+              returnKeyType="done"
+              editable={!isListening}
+            />
+            <Animated.View style={{ transform: [{ scale: pulseAnim }], marginLeft: 8 }}>
+              <TouchableOpacity
+                style={[styles.micBtn, isListening && styles.micBtnListening]}
+                onPress={handleSpeechToText}
+              >
+                <Text style={styles.micBtnText}>🎤</Text>
+              </TouchableOpacity>
+            </Animated.View>
+            <TouchableOpacity
+              style={[styles.manualTranslateBtn, !manualInput.trim() && { opacity: 0.4 }]}
+              onPress={() => handleTranslate(manualInput)}
+              disabled={!manualInput.trim()}
+            >
+              <Text style={styles.manualTranslateBtnText}>ترجمة</Text>
+            </TouchableOpacity>
           </View>
 
           <View style={styles.footer}>
@@ -1407,6 +1544,15 @@ export default function App() {
         config={config}
         onSave={saveConfig}
       />
+
+      <TranslationModal
+        visible={translationVisible}
+        onClose={() => setTranslationVisible(false)}
+        originalText={translationOriginal}
+        translatedText={translationResult}
+        isLoading={isTranslating}
+        error={translationError}
+      />
     </View>
   );
 }
@@ -1464,7 +1610,7 @@ const styles = StyleSheet.create({
   },
   errorText: { color: '#fff', fontSize: 12, fontWeight: '600', textAlign: 'center' },
   wordSection: { marginTop: 12 },
-  mainContent: { marginBottom: 40 },
+  mainContent: { marginBottom: 8 },
   footer: { alignItems: 'center', paddingBottom: 10 },
   infoPill: {
     backgroundColor: 'rgba(15,23,42,0.7)',
@@ -1519,10 +1665,75 @@ const styles = StyleSheet.create({
   finalTextTitle: {
     color: '#a5b4fc', fontSize: 9, fontWeight: '800', letterSpacing: 1.5, marginLeft: 6,
   },
-  finalTextHeaderBtns: { flexDirection: 'row', gap: 8, alignItems: 'center' },
-  finalTextActionBtn: { padding: 4 },
+  finalTextHeaderBtns: { flexDirection: 'row', alignItems: 'center' },
+  finalTextActionBtn: { padding: 4, marginLeft: 8 },
+  finalTextTranslateBtn: {
+    backgroundColor: '#6C63FF',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginRight: 8,
+  },
+  finalTextTranslateTxt: {
+    color: 'white',
+    fontSize: 13,
+    fontWeight: '700',
+  },
   finalTextContent: { color: '#a5b4fc', fontSize: 15, fontWeight: '600', lineHeight: 22, minHeight: 22 },
   finalTextEmpty: { color: '#2d3748' },
+  manualInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: '100%',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    borderRadius: 14,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(108,99,255,0.25)',
+  },
+  manualInput: {
+    flex: 1,
+    height: 44,
+    backgroundColor: '#1a1a2e',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '500',
+    borderWidth: 1,
+    borderColor: 'rgba(108,99,255,0.5)',
+  },
+  manualTranslateBtn: {
+    backgroundColor: '#6C63FF',
+    paddingVertical: 0,
+    paddingHorizontal: 16,
+    height: 44,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 10,
+  },
+  manualTranslateBtnText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  micBtn: {
+    backgroundColor: '#6C63FF',
+    borderRadius: 22,
+    width: 44,
+    height: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  micBtnListening: {
+    backgroundColor: '#e74c3c',
+  },
+  micBtnText: {
+    fontSize: 20,
+  },
   // Multi-hand upload chips
   uploadHandsRow: {
     flexDirection: 'row', justifyContent: 'center', flexWrap: 'wrap', gap: 12, marginTop: 16,
