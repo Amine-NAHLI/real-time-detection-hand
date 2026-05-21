@@ -14,10 +14,10 @@ export const WordDisplay = ({ text, onClear, onTranslate }) => {
           {onTranslate && (
             <TouchableOpacity
               onPress={() => onTranslate(text)}
-              style={styles.translateButton}
+              style={[styles.translateButton, !text && { opacity: 0.4 }]}
               disabled={!text}
             >
-              <Text style={[styles.translateText, !text && styles.translateTextDisabled]}>ترجمة</Text>
+              <Text style={styles.translateText}>ترجمة</Text>
             </TouchableOpacity>
           )}
           <TouchableOpacity onPress={onClear} style={styles.clearButton}>
@@ -72,21 +72,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   translateButton: {
-    backgroundColor: 'rgba(99,102,241,0.15)',
+    backgroundColor: '#6C63FF',
     paddingVertical: 4,
     paddingHorizontal: 10,
     borderRadius: 10,
-    borderWidth: 1,
-    borderColor: 'rgba(99,102,241,0.4)',
     marginRight: 8,
   },
   translateText: {
-    color: '#a5b4fc',
+    color: '#fff',
     fontSize: 13,
     fontWeight: '700',
   },
   translateTextDisabled: {
-    color: '#334155',
+    color: 'rgba(255,255,255,0.4)',
   },
   clearButton: {
     padding: 4,
