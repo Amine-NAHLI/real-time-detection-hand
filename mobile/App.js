@@ -297,6 +297,52 @@ const WEB_CSS = `
   .asl-copy-btn:disabled { opacity: 0.25; cursor: default; }
   .asl-copy-btn.copied { color: #10b981; opacity: 1; }
 
+  /* ── Translate btn in TEXTE DÉTECTÉ ── */
+  .asl-detected-translate-btn {
+    height: 26px; padding: 0 12px; border-radius: 8px; border: none;
+    background: #6C63FF; color: #fff; font-size: 12px; font-weight: 700;
+    cursor: pointer; flex-shrink: 0; transition: opacity 0.15s;
+    display: flex; align-items: center; margin-right: 6px;
+  }
+  .asl-detected-translate-btn:disabled { opacity: 0.4; cursor: default; }
+  .asl-detected-translate-btn:hover:not(:disabled) { opacity: 0.85; }
+
+  /* ── Manual input row ── */
+  .asl-manual-row {
+    display: flex; align-items: center; gap: 8px;
+    background: rgba(0,0,0,0.45); border-radius: 14px;
+    padding: 10px 12px; border: 1px solid rgba(108,99,255,0.25);
+  }
+  .asl-manual-input {
+    flex: 1; height: 40px; background: #1a1a2e; border-radius: 10px;
+    padding: 0 14px; color: #fff; font-size: 15px; font-weight: 500;
+    border: 1px solid rgba(108,99,255,0.5); outline: none; font-family: inherit;
+  }
+  .asl-manual-input::placeholder { color: #6b7280; }
+  .asl-manual-input:focus { border-color: rgba(108,99,255,0.9); }
+  .asl-manual-input:disabled { opacity: 0.7; }
+  .asl-mic-btn {
+    width: 40px; height: 40px; border-radius: 20px; border: none;
+    background: #6C63FF; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px; flex-shrink: 0; transition: background 0.2s;
+  }
+  .asl-mic-btn.listening {
+    background: #e74c3c;
+    animation: asl-pulse 1s ease-in-out infinite;
+  }
+  @keyframes asl-pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.15); }
+  }
+  .asl-manual-translate-btn {
+    height: 40px; padding: 0 16px; border-radius: 10px; border: none;
+    background: #6C63FF; color: #fff; font-size: 15px; font-weight: 700;
+    cursor: pointer; flex-shrink: 0; transition: opacity 0.15s; font-family: inherit;
+  }
+  .asl-manual-translate-btn:disabled { opacity: 0.4; cursor: default; }
+  .asl-manual-translate-btn:hover:not(:disabled) { opacity: 0.85; }
+
   /* ── Multi-hand upload display ── */
   .asl-upload-hands-row {
     display: flex; justify-content: center; gap: 14px; flex-wrap: wrap; margin-top: 16px;
@@ -410,6 +456,11 @@ function WebLayout({
   uploadResult,
   isAutoMode,
   setIsAutoMode,
+  handleTranslate,
+  manualInput,
+  setManualInput,
+  isListening,
+  handleSpeechToText,
 }) {
   const { color: statusColor, label: statusLabel } =
     STATUS_CONFIG[status] ?? STATUS_CONFIG[WS_STATUS.DISCONNECTED];
@@ -753,6 +804,14 @@ function WebLayout({
                 <span className="asl-section-label" style={{ marginBottom: 0 }}>TEXTE DÉTECTÉ</span>
                 <div className="asl-detected-header-btns">
                   <button
+                    className="asl-detected-translate-btn"
+                    onClick={() => handleTranslate(detectedText)}
+                    disabled={!detectedText}
+                    title="Traduire en arabe"
+                  >
+                    ترجمة
+                  </button>
+                  <button
                     className={`asl-copy-btn${copiedFeedback ? ' copied' : ''}`}
                     onClick={handleCopy}
                     disabled={!detectedText}
@@ -771,6 +830,31 @@ function WebLayout({
               </div>
             </div>
 
+            <div className="asl-manual-row">
+              <input
+                className="asl-manual-input"
+                type="text"
+                value={manualInput}
+                onChange={e => setManualInput(e.target.value)}
+                placeholder={isListening ? 'Écoute...' : 'Saisir du texte...'}
+                disabled={isListening}
+              />
+              <button
+                className={`asl-mic-btn${isListening ? ' listening' : ''}`}
+                onClick={handleSpeechToText}
+                title="Reconnaissance vocale"
+              >
+                🎤
+              </button>
+              <button
+                className="asl-manual-translate-btn"
+                onClick={() => handleTranslate(manualInput)}
+                disabled={!manualInput.trim()}
+                title="Traduire en arabe"
+              >
+                ترجمة
+              </button>
+            </div>
             <div className="asl-server-info">{config.SERVER_IP}:{config.PORT}</div>
           </div>
 
@@ -955,7 +1039,7 @@ export default function App() {
       setLastCommittedSign(prediction);
       stabilityCounter.current = 0;
     }
-  }, [prediction, lastCommittedSign, isAutoMode]);
+  }, [prediction, confidence, handDetected, lastCommittedSign, isAutoMode]);
 
   // ── Mobile auto mode: time-based interval ──
   useEffect(() => {
@@ -1126,7 +1210,7 @@ export default function App() {
     }
 
     const picked = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ['images'],
       allowsEditing: false,
       quality: 0.8,
     });
@@ -1306,12 +1390,25 @@ export default function App() {
           uploadResult={uploadResult}
           isAutoMode={isAutoMode}
           setIsAutoMode={setIsAutoMode}
+          handleTranslate={handleTranslate}
+          manualInput={manualInput}
+          setManualInput={setManualInput}
+          isListening={isListening}
+          handleSpeechToText={handleSpeechToText}
         />
         <SettingsModal
           visible={isSettingsVisible}
           onClose={() => setIsSettingsVisible(false)}
           config={config}
           onSave={saveConfig}
+        />
+        <TranslationModal
+          visible={translationVisible}
+          onClose={() => setTranslationVisible(false)}
+          originalText={translationOriginal}
+          translatedText={translationResult}
+          isLoading={isTranslating}
+          error={translationError}
         />
       </>
     );
@@ -1382,9 +1479,9 @@ export default function App() {
                 </View>
                 <View style={styles.finalTextHeaderBtns}>
                   <TouchableOpacity
-                    style={[styles.finalTextTranslateBtn, !accumulatedText && { opacity: 0.4 }]}
-                    onPress={() => handleTranslate(accumulatedText)}
-                    disabled={!accumulatedText}
+                    style={[styles.finalTextTranslateBtn, !finalText && { opacity: 0.4 }]}
+                    onPress={() => handleTranslate(finalText)}
+                    disabled={!finalText}
                   >
                     <Text style={styles.finalTextTranslateTxt}>ترجمة</Text>
                   </TouchableOpacity>
