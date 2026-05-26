@@ -321,6 +321,16 @@ const WEB_CSS = `
   .asl-manual-input::placeholder { color: #6b7280; }
   .asl-manual-input:focus { border-color: rgba(108,99,255,0.9); }
   .asl-manual-input:disabled { opacity: 0.7; }
+  .asl-speech-lang-btn {
+    width: 40px; height: 40px; border-radius: 20px; border: none;
+    background: rgba(99,102,241,0.2); color: #a5b4fc; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 800; flex-shrink: 0;
+    letter-spacing: 0.5px; transition: background 0.2s, color 0.2s;
+    border: 1px solid rgba(99,102,241,0.35);
+  }
+  .asl-speech-lang-btn:hover:not(:disabled) { background: rgba(99,102,241,0.35); color: #fff; }
+  .asl-speech-lang-btn:disabled { opacity: 0.4; cursor: default; }
   .asl-mic-btn {
     width: 40px; height: 40px; border-radius: 20px; border: none;
     background: #6C63FF; cursor: pointer;
@@ -461,6 +471,8 @@ function WebLayout({
   setManualInput,
   isListening,
   handleSpeechToText,
+  speechLang,
+  setSpeechLang,
 }) {
   const { color: statusColor, label: statusLabel } =
     STATUS_CONFIG[status] ?? STATUS_CONFIG[WS_STATUS.DISCONNECTED];
@@ -659,11 +671,11 @@ function WebLayout({
       const valid = uploadResult.hands.filter(h => h.pred !== 'nothing');
       if (valid.length > 0) {
         const word = valid.map(h => h.pred.toUpperCase()).join('');
-        setDetectedText(prev => prev ? prev + ' ' + word : word);
+        setCurrentWord(prev => prev + word);
       }
     } else if (uploadResult?.pred && uploadResult.pred !== 'nothing') {
       const letter = uploadResult.pred.toUpperCase();
-      setDetectedText(prev => prev ? prev + ' ' + letter : letter);
+      setCurrentWord(prev => prev + letter);
     }
     setShowUploadModal(false);
   };
@@ -840,6 +852,14 @@ function WebLayout({
                 disabled={isListening}
               />
               <button
+                className="asl-speech-lang-btn"
+                onClick={() => setSpeechLang(p => p === 'en' ? 'fr' : 'en')}
+                title="Changer de langue de dictée"
+                disabled={isListening}
+              >
+                {speechLang.toUpperCase()}
+              </button>
+              <button
                 className={`asl-mic-btn${isListening ? ' listening' : ''}`}
                 onClick={handleSpeechToText}
                 title="Reconnaissance vocale"
@@ -973,6 +993,7 @@ export default function App() {
   const [isTranslating, setIsTranslating] = useState(false);
   const [translationError, setTranslationError] = useState(false);
   const [manualInput, setManualInput] = useState('');
+  const [speechLang, setSpeechLang] = useState('en'); // 'en' or 'fr'
 
   // Speech-to-Text (web only)
   const [isListening, setIsListening] = useState(false);
@@ -1247,11 +1268,11 @@ export default function App() {
       const valid = uploadResult.hands.filter(h => h.pred !== 'nothing');
       if (valid.length > 0) {
         const word = valid.map(h => h.pred.toUpperCase()).join('');
-        setFinalText(prev => prev ? prev + ' ' + word : word);
+        setAccumulatedText(prev => prev + word);
       }
     } else if (uploadResult?.pred && uploadResult.pred !== 'nothing' && uploadResult.hand_detected) {
       const letter = uploadResult.pred.toUpperCase();
-      setFinalText(prev => prev ? prev + ' ' + letter : letter);
+      setAccumulatedText(prev => prev + letter);
     }
     setShowUploadModal(false);
   };
@@ -1288,7 +1309,13 @@ export default function App() {
 
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
-      Alert.alert('Non supporté sur cet appareil');
+      alert(
+        "La reconnaissance vocale n'est pas supportée ou est bloquée par votre navigateur.\n\n" +
+        "Raisons possibles :\n" +
+        "1. Vous utilisez un navigateur non compatible (utilisez Google Chrome, MS Edge ou Safari).\n" +
+        "2. Le site est accédé en HTTP simple (l'API de reconnaissance vocale nécessite obligatoirement une connexion sécurisée HTTPS ou localhost).\n" +
+        "3. L'autorisation d'accès au micro a été refusée ou bloquée par les paramètres de votre navigateur."
+      );
       return;
     }
 
@@ -1299,8 +1326,9 @@ export default function App() {
     }
 
     const recognition = new SpeechRecognition();
-    recognition.lang = 'en-US';
-    recognition.interimResults = false;
+    recognition.lang = speechLang === 'fr' ? 'fr-FR' : 'en-US';
+    recognition.continuous = true;
+    recognition.interimResults = true;
     recognition.maxAlternatives = 1;
     recognitionRef.current = recognition;
 
@@ -1309,15 +1337,19 @@ export default function App() {
       setIsListening(true);
       pulseLoopRef.current = Animated.loop(
         Animated.sequence([
-          Animated.timing(pulseAnim, { toValue: 1.2, duration: 500, useNativeDriver: true }),
-          Animated.timing(pulseAnim, { toValue: 1.0, duration: 500, useNativeDriver: true }),
+          Animated.timing(pulseAnim, { toValue: 1.2, duration: 500, useNativeDriver: false }),
+          Animated.timing(pulseAnim, { toValue: 1.0, duration: 500, useNativeDriver: false }),
         ])
       );
       pulseLoopRef.current.start();
     };
 
     recognition.onresult = (event) => {
-      setManualInput(event.results[0][0].transcript);
+      let fullTranscript = '';
+      for (let i = 0; i < event.results.length; i++) {
+        fullTranscript += event.results[i][0].transcript;
+      }
+      setManualInput(fullTranscript);
     };
 
     const cleanupRecognition = () => {
@@ -1329,11 +1361,28 @@ export default function App() {
       recognitionRef.current = null;
     };
 
-    recognition.onerror = cleanupRecognition;
+    recognition.onerror = (event) => {
+      console.error('Speech recognition error:', event.error);
+      if (event.error === 'not-allowed') {
+        alert("L'accès au microphone a été refusé. Veuillez accorder la permission d'accès au micro dans les paramètres de votre navigateur.");
+      } else if (event.error === 'service-not-allowed') {
+        alert("Le service de reconnaissance vocale n'est pas autorisé. Cela se produit généralement si la page n'est pas servie en HTTPS.");
+      } else {
+        alert("Erreur de reconnaissance vocale : " + event.error);
+      }
+      cleanupRecognition();
+    };
+
     recognition.onend = cleanupRecognition;
 
-    recognition.start();
-  }, [pulseAnim]);
+    try {
+      recognition.start();
+    } catch (err) {
+      console.error('Failed to start speech recognition:', err);
+      alert('Impossible de démarrer la reconnaissance vocale : ' + err.message);
+      cleanupRecognition();
+    }
+  }, [pulseAnim, speechLang]);
 
   // Stop any in-progress recognition on unmount
   useEffect(() => {
@@ -1395,6 +1444,8 @@ export default function App() {
           setManualInput={setManualInput}
           isListening={isListening}
           handleSpeechToText={handleSpeechToText}
+          speechLang={speechLang}
+          setSpeechLang={setSpeechLang}
         />
         <SettingsModal
           visible={isSettingsVisible}
