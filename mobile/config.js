@@ -8,7 +8,7 @@ import { Platform } from 'react-native';
 //     Windows : run `ipconfig`  → "IPv4 Address" under your Wi-Fi adapter
 //     Mac/Linux: run `ifconfig` → inet on en0 (Mac) or wlan0 (Linux)
 export const CONFIG = {
-  SERVER_IP: Platform.OS === 'web' ? '127.0.0.1' : '10.0.2.2',
+  SERVER_IP: Platform.OS === 'web' ? '127.0.0.1' : '192.168.1.10',
   PORT: '8091',
   API_PREFIX: '/api/v1',
 };

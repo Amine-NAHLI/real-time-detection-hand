@@ -39,10 +39,15 @@ export const useASLWebSocket = (url) => {
       clearTimer();
       setStatus(WS_STATUS.CONNECTING);
 
+      console.log('─────────────────────────────────────');
+      console.log('🔌 [WS] Attempting connection to:', url);
+      console.log('─────────────────────────────────────');
+
       let ws;
       try {
         ws = new WebSocket(url);
-      } catch {
+      } catch (err) {
+        console.error('❌ [WS] Failed to create WebSocket:', err.message || err);
         setStatus(WS_STATUS.ERROR);
         setWsError('Invalid server URL — check IP and port in Settings');
         return;
@@ -51,6 +56,7 @@ export const useASLWebSocket = (url) => {
 
       ws.onopen = () => {
         if (!aliveRef.current) { ws.close(); return; }
+        console.log('✅ [WS] CONNECTED successfully to:', url);
         setStatus(WS_STATUS.CONNECTED);
         setWsError(null);
         delay = MIN_DELAY;
@@ -68,21 +74,28 @@ export const useASLWebSocket = (url) => {
             setHandDetected(data.hand_detected ?? false);
             setLandmarks(data.landmarks ?? null);
           } else if (data.detail) {
+            console.warn('⚠️ [WS] Server detail message:', data.detail);
             setWsError(data.detail);
           }
-        } catch {
+        } catch (parseErr) {
+          console.error('❌ [WS] Failed to parse message:', parseErr.message);
           setWsError('Invalid response from server');
         }
       };
 
-      ws.onerror = () => {
+      ws.onerror = (event) => {
         if (!aliveRef.current) return;
+        console.error('❌ [WS] CONNECTION ERROR to:', url);
+        console.error('❌ [WS] Error event:', JSON.stringify(event, null, 2));
+        console.error('❌ [WS] ReadyState:', ws.readyState);
         setStatus(WS_STATUS.ERROR);
         setWsError('Connection failed — check server IP and port in Settings');
       };
 
-      ws.onclose = () => {
+      ws.onclose = (event) => {
         if (!aliveRef.current) return;
+        console.log('🔒 [WS] Connection CLOSED. Code:', event.code, 'Reason:', event.reason || '(none)');
+        console.log('🔒 [WS] Will retry in', Math.round(delay / 1000), 'seconds...');
         setStatus(WS_STATUS.DISCONNECTED);
         // Exponential backoff before reconnecting
         timerRef.current = setTimeout(() => {

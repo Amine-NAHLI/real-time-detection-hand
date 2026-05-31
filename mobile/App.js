@@ -5,7 +5,6 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  SafeAreaView,
   ActivityIndicator,
   Alert,
   Modal,
@@ -14,7 +13,9 @@ import {
   Switch,
   Share,
   Animated,
+  ScrollView,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import { StatusBar } from 'expo-status-bar';
@@ -32,8 +33,8 @@ import { translateToArabic } from './services/translationService';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const CAPTURE_INTERVAL_MS = 250;
-const STABILITY_REQUIRED = 4;
+const CAPTURE_INTERVAL_MS = Platform.OS === 'web' ? 250 : 350;
+const STABILITY_REQUIRED = Platform.OS === 'web' ? 4 : 2;
 
 const MANUAL_CONF_THRESHOLD = 0.85;
 const MANUAL_HOLD_MS = 1500;
@@ -1015,6 +1016,19 @@ export default function App() {
   const wsUrl = `ws://${config.SERVER_IP}:${config.PORT}/api/v1/ws/predict`;
   const apiBase = `http://${config.SERVER_IP}:${config.PORT}/api/v1`;
 
+  // ── Startup diagnostics ──
+  useEffect(() => {
+    console.log('═══════════════════════════════════════════');
+    console.log('🚀 [APP] ASL Detection App Started');
+    console.log('📱 [APP] Platform:', Platform.OS);
+    console.log('🌐 [APP] Server IP:', config.SERVER_IP);
+    console.log('🔌 [APP] Server Port:', config.PORT);
+    console.log('🔗 [APP] WebSocket URL:', wsUrl);
+    console.log('🔗 [APP] API Base URL:', apiBase);
+    console.log('📷 [APP] Capture interval:', CAPTURE_INTERVAL_MS, 'ms');
+    console.log('═══════════════════════════════════════════');
+  }, [config]);
+
   const { prediction, confidence, handDetected, landmarks, isConnected, status, wsError, sendFrame } =
     useASLWebSocket(wsUrl);
 
@@ -1172,19 +1186,32 @@ export default function App() {
 
   // Load saved config from AsyncStorage
   useEffect(() => {
+    // Safety timeout: force loading screen to end after 1.5 seconds no matter what
+    const timer = setTimeout(() => {
+      setIsLoading(false);
+    }, 1500);
+
     (async () => {
       try {
         const savedIP   = await AsyncStorage.getItem('SERVER_IP');
         const savedPort = await AsyncStorage.getItem('PORT');
-        if (savedIP && savedPort) {
+        // Migrate: if the old emulator IP was cached, clear it so new default takes effect
+        if (savedIP === '10.0.2.2') {
+          console.log('🔄 [CONFIG] Clearing stale emulator IP from cache...');
+          await AsyncStorage.removeItem('SERVER_IP');
+        } else if (savedIP && savedPort) {
+          console.log('💾 [CONFIG] Loaded saved config:', savedIP, ':', savedPort);
           setConfig(prev => ({ ...prev, SERVER_IP: savedIP, PORT: savedPort }));
         }
       } catch (err) {
         console.warn('Failed to load config:', err);
       } finally {
+        clearTimeout(timer);
         setIsLoading(false);
       }
     })();
+
+    return () => clearTimeout(timer);
   }, []);
 
   const saveConfig = async (newConfig) => {
@@ -1197,21 +1224,39 @@ export default function App() {
     }
   };
 
+  const captureCountRef = useRef(0);
+
   const startCapture = useCallback(() => {
     if (isCapturingRef.current) return;
     isCapturingRef.current = true;
+    captureCountRef.current = 0;
+    console.log('📷 [CAMERA] Starting capture loop (interval:', CAPTURE_INTERVAL_MS, 'ms)');
     captureIntervalRef.current = setInterval(async () => {
-      if (!cameraRef.current) return;
+      if (!cameraRef.current) {
+        if (captureCountRef.current === 0) {
+          console.warn('📷 [CAMERA] cameraRef is null — camera not ready yet');
+        }
+        return;
+      }
       try {
+        const t0 = Date.now();
         const photo = await cameraRef.current.takePictureAsync({
-          base64: true, quality: 0.2, skipProcessing: true, shutterSound: false,
+          base64: true, quality: 0.5, skipProcessing: true, shutterSound: false,
         });
+        const dt = Date.now() - t0;
+        captureCountRef.current += 1;
+        if (captureCountRef.current <= 3 || captureCountRef.current % 20 === 0) {
+          console.log(`📷 [CAMERA] Capture #${captureCountRef.current} took ${dt}ms, hasBase64: ${!!photo?.base64}`);
+        }
         if (photo?.base64) sendFrame(`data:image/jpeg;base64,${photo.base64}`);
-      } catch { /* ignore transient capture errors */ }
+      } catch (err) {
+        console.error('❌ [CAMERA] takePictureAsync error:', err.message || err);
+      }
     }, CAPTURE_INTERVAL_MS);
   }, [sendFrame]);
 
   const stopCapture = () => {
+    console.log('📷 [CAMERA] Stopping capture loop. Total captures:', captureCountRef.current);
     isCapturingRef.current = false;
     if (captureIntervalRef.current) {
       clearInterval(captureIntervalRef.current);
@@ -1394,7 +1439,7 @@ export default function App() {
 
   // ─── Loading / Permission gates ───────────────────────────────────────────
 
-  if (isLoading || (!permission && Platform.OS !== 'web')) {
+  if (isLoading) {
     return (
       <View style={styles.centeredScreen}>
         <ActivityIndicator size="large" color="#6366f1" />
@@ -1471,47 +1516,67 @@ export default function App() {
     STATUS_CONFIG[status] ?? STATUS_CONFIG[WS_STATUS.DISCONNECTED];
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
       <StatusBar style="light" />
 
-      <CameraBackground ref={cameraRef} style={styles.camera} onCameraReady={startCapture}>
-        <SafeAreaView style={styles.overlay}>
-          <View style={styles.header}>
-            <View style={styles.statusBadge}>
-              <View style={[styles.statusDot, { backgroundColor: statusColor }]} />
-              <Text style={styles.statusText}>{statusLabel}</Text>
-            </View>
-            <View style={styles.headerButtons}>
-              <TouchableOpacity style={styles.iconButton} onPress={pickAndUpload}>
-                <ImageIcon size={22} color="#fff" />
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.iconButton, { marginLeft: 8 }]}
-                onPress={() => setIsSettingsVisible(true)}
-              >
-                <Settings size={22} color="#fff" />
-              </TouchableOpacity>
-            </View>
-          </View>
+      {/* Header */}
+      <View style={styles.header}>
+        <View style={styles.statusBadge}>
+          <View style={[styles.statusDot, { backgroundColor: statusColor }]} />
+          <Text style={styles.statusText}>{statusLabel}</Text>
+        </View>
+        <View style={styles.headerButtons}>
+          <TouchableOpacity style={styles.iconButton} onPress={pickAndUpload}>
+            <ImageIcon size={22} color="#fff" />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.iconButton, { marginLeft: 8 }]}
+            onPress={() => setIsSettingsVisible(true)}
+          >
+            <Settings size={22} color="#fff" />
+          </TouchableOpacity>
+        </View>
+      </View>
 
-          {/* Mode toggle */}
-          <View style={styles.modeToggleRow}>
-            <Text style={[styles.modeLabel, !isAutoMode && styles.modeLabelManual]}>Manuel</Text>
-            <Switch
-              value={isAutoMode}
-              onValueChange={setIsAutoMode}
-              trackColor={{ false: '#334155', true: '#10b981' }}
-              thumbColor={isAutoMode ? '#fff' : '#94a3b8'}
-              style={{ marginHorizontal: 8 }}
-            />
-            <Text style={[styles.modeLabel, isAutoMode && styles.modeLabelAuto]}>Auto</Text>
-          </View>
+      {/* Camera Preview Section (Round, Compact Box) */}
+      <View style={styles.cameraBox}>
+        <CameraBackground ref={cameraRef} style={styles.camera} onCameraReady={startCapture} />
+      </View>
 
-          {wsError && !isConnected && (
-            <View style={styles.errorBanner}>
-              <Text style={styles.errorText}>{wsError}</Text>
-            </View>
-          )}
+      {/* Mode toggle */}
+      <View style={styles.modeToggleRow}>
+        <Text style={[styles.modeLabel, !isAutoMode && styles.modeLabelManual]}>Manuel</Text>
+        <Switch
+          value={isAutoMode}
+          onValueChange={setIsAutoMode}
+          trackColor={{ false: '#334155', true: '#10b981' }}
+          thumbColor={isAutoMode ? '#fff' : '#94a3b8'}
+          style={{ marginHorizontal: 8 }}
+        />
+        <Text style={[styles.modeLabel, isAutoMode && styles.modeLabelAuto]}>Auto</Text>
+      </View>
+
+      <ScrollView
+        style={styles.scrollContainer}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {wsError && !isConnected && (
+          <View style={styles.errorBanner}>
+            <Text style={styles.errorText}>{wsError}</Text>
+          </View>
+        )}
+
+        {/* SECTION 1: DÉTECTION CAMÉRA EN DIRECT */}
+        <View style={styles.sectionCard}>
+          <View style={styles.sectionTitleRow}>
+            <Text style={styles.sectionTitleIcon}>🎥</Text>
+            <Text style={styles.sectionTitle}>DÉTECTION CAMÉRA EN DIRECT</Text>
+          </View>
+          
+          <View style={styles.mainContent}>
+            <PredictionCard prediction={prediction} confidence={confidence} handDetected={handDetected} />
+          </View>
 
           <View style={styles.wordSection}>
             <WordDisplay
@@ -1520,46 +1585,13 @@ export default function App() {
               onTranslate={handleTranslate}
             />
           </View>
+        </View>
 
-          <View style={styles.finalTextSection}>
-            <View style={styles.finalTextCard}>
-              <View style={styles.finalTextHeader}>
-                <View style={styles.finalTextTitleRow}>
-                  <CheckCircle size={13} color="#a5b4fc" />
-                  <Text style={styles.finalTextTitle}>TEXTE DÉTECTÉ</Text>
-                </View>
-                <View style={styles.finalTextHeaderBtns}>
-                  <TouchableOpacity
-                    style={[styles.finalTextTranslateBtn, !finalText && { opacity: 0.4 }]}
-                    onPress={() => handleTranslate(finalText)}
-                    disabled={!finalText}
-                  >
-                    <Text style={styles.finalTextTranslateTxt}>ترجمة</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.finalTextActionBtn}
-                    onPress={handleFinalTextCopy}
-                    disabled={!finalText}
-                  >
-                    <Copy size={16} color={finalText ? '#64748b' : '#2d3748'} />
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.finalTextActionBtn}
-                    onPress={() => setFinalText('')}
-                    disabled={!finalText}
-                  >
-                    <Trash2 size={16} color={finalText ? '#64748b' : '#2d3748'} />
-                  </TouchableOpacity>
-                </View>
-              </View>
-              <Text style={[styles.finalTextContent, !finalText && styles.finalTextEmpty]}>
-                {finalText || 'Aucun texte'}
-              </Text>
-            </View>
-          </View>
-
-          <View style={styles.mainContent}>
-            <PredictionCard prediction={prediction} confidence={confidence} handDetected={handDetected} />
+        {/* SECTION 2: SAISIE MANUELLE & AUDIO */}
+        <View style={styles.sectionCard}>
+          <View style={styles.sectionTitleRow}>
+            <Text style={styles.sectionTitleIcon}>✍️</Text>
+            <Text style={styles.sectionTitle}>SAISIE MANUELLE & AUDIO</Text>
           </View>
 
           <View style={styles.manualInputRow}>
@@ -1588,14 +1620,68 @@ export default function App() {
               <Text style={styles.manualTranslateBtnText}>ترجمة</Text>
             </TouchableOpacity>
           </View>
+        </View>
 
-          <View style={styles.footer}>
-            <View style={styles.infoPill}>
-              <Text style={styles.infoText}>{config.SERVER_IP}:{config.PORT}</Text>
-            </View>
+        {/* SECTION 3: DÉTECTION PAR IMAGE */}
+        <View style={styles.sectionCard}>
+          <View style={styles.sectionTitleRow}>
+            <Text style={styles.sectionTitleIcon}>🖼️</Text>
+            <Text style={styles.sectionTitle}>DÉTECTION PAR IMAGE</Text>
           </View>
-        </SafeAreaView>
-      </CameraBackground>
+
+          <TouchableOpacity style={styles.uploadImageBtn} onPress={pickAndUpload}>
+            <ImageIcon size={18} color="#fff" style={{ marginRight: 8 }} />
+            <Text style={styles.uploadImageBtnText}>Sélectionner une photo à analyser</Text>
+          </TouchableOpacity>
+
+          {finalText ? (
+            <View style={styles.finalTextSection}>
+              <View style={styles.finalTextCard}>
+                <View style={styles.finalTextHeader}>
+                  <View style={styles.finalTextTitleRow}>
+                    <CheckCircle size={13} color="#a5b4fc" />
+                    <Text style={styles.finalTextTitle}>RÉSULTAT DE L'IMAGE</Text>
+                  </View>
+                  <View style={styles.finalTextHeaderBtns}>
+                    <TouchableOpacity
+                      style={[styles.finalTextTranslateBtn, !finalText && { opacity: 0.4 }]}
+                      onPress={() => handleTranslate(finalText)}
+                      disabled={!finalText}
+                    >
+                      <Text style={styles.finalTextTranslateTxt}>ترجمة</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.finalTextActionBtn}
+                      onPress={handleFinalTextCopy}
+                      disabled={!finalText}
+                    >
+                      <Copy size={16} color={finalText ? '#a5b4fc' : '#2d3748'} />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.finalTextActionBtn}
+                      onPress={() => setFinalText('')}
+                      disabled={!finalText}
+                    >
+                      <Trash2 size={16} color={finalText ? '#ef4444' : '#2d3748'} />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+                <Text style={[styles.finalTextContent, !finalText && styles.finalTextEmpty]}>
+                  {finalText}
+                </Text>
+              </View>
+            </View>
+          ) : (
+            <Text style={styles.uploadImagePlaceholder}>Aucune image analysée pour le moment.</Text>
+          )}
+        </View>
+
+        <View style={styles.footer}>
+          <View style={styles.infoPill}>
+            <Text style={styles.infoText}>{config.SERVER_IP}:{config.PORT}</Text>
+          </View>
+        </View>
+      </ScrollView>
 
       {/* Upload modal */}
       <Modal
@@ -1701,14 +1787,14 @@ export default function App() {
         isLoading={isTranslating}
         error={translationError}
       />
-    </View>
+    </SafeAreaView>
   );
 }
 
 // ─── Native StyleSheet (iOS / Android only) ───────────────────────────────────
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#000' },
+  container: { flex: 1, backgroundColor: '#0b0f19', paddingHorizontal: 16 },
   centeredScreen: {
     flex: 1, backgroundColor: '#0f172a',
     justifyContent: 'center', alignItems: 'center', padding: 40,
@@ -1722,11 +1808,24 @@ const styles = StyleSheet.create({
     paddingHorizontal: 32, borderRadius: 16, width: '100%', alignItems: 'center',
   },
   buttonText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+  cameraBox: {
+    height: 250,
+    width: '100%',
+    borderRadius: 20,
+    overflow: 'hidden',
+    backgroundColor: '#000',
+    marginTop: 8,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+  },
   camera: { flex: 1 },
-  overlay: { flex: 1, justifyContent: 'space-between', padding: 20 },
+  overlay: { flex: 1, paddingHorizontal: 16, paddingTop: 10 },
+  scrollContainer: { flex: 1 },
+  scrollContent: { paddingBottom: 24, gap: 10 },
   header: {
     flexDirection: 'row', justifyContent: 'space-between',
-    alignItems: 'center', paddingTop: 10,
+    alignItems: 'center', marginTop: 10,
   },
   statusBadge: {
     flexDirection: 'row', alignItems: 'center',
@@ -1896,5 +1995,51 @@ const styles = StyleSheet.create({
   uploadComposedWord: {
     color: '#10b981', fontSize: 38, fontWeight: '900', textAlign: 'center',
     letterSpacing: 6, marginTop: 12,
+  },
+  sectionCard: {
+    backgroundColor: 'rgba(15, 23, 42, 0.45)',
+    borderRadius: 20,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.05)',
+    marginBottom: 16,
+  },
+  sectionTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  sectionTitleIcon: {
+    fontSize: 16,
+    marginRight: 6,
+  },
+  sectionTitle: {
+    color: '#94a3b8',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1.5,
+  },
+  uploadImageBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#6366f1',
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginTop: 4,
+    marginBottom: 8,
+  },
+  uploadImageBtnText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  uploadImagePlaceholder: {
+    color: 'rgba(255, 255, 255, 0.3)',
+    fontSize: 13,
+    textAlign: 'center',
+    paddingVertical: 12,
+    fontStyle: 'italic',
   },
 });

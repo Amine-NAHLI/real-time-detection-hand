@@ -1,7 +1,9 @@
 import React, { forwardRef, useRef, useImperativeHandle } from 'react';
 import { CameraView } from 'expo-camera';
+import { StyleSheet, View } from 'react-native';
 
-// Mobile: wraps expo-camera CameraView and exposes takePictureAsync via ref
+// Mobile: wraps expo-camera CameraView and exposes takePictureAsync via ref.
+// Renders children as parallel sibling with absolute fill to satisfy no-children constraint on CameraView.
 const CameraBackground = forwardRef(({ style, onCameraReady, children }, ref) => {
   const cameraRef = useRef(null);
 
@@ -13,15 +15,28 @@ const CameraBackground = forwardRef(({ style, onCameraReady, children }, ref) =>
   }));
 
   return (
-    <CameraView
-      ref={cameraRef}
-      style={style}
-      facing="front"
-      onCameraReady={onCameraReady}
-    >
-      {children}
-    </CameraView>
+    <View style={[style, styles.container]}>
+      <CameraView
+        ref={cameraRef}
+        style={StyleSheet.absoluteFill}
+        facing="front"
+        flash="off"
+        onCameraReady={onCameraReady}
+      />
+      {children && (
+        <View style={StyleSheet.absoluteFill}>
+          {children}
+        </View>
+      )}
+    </View>
   );
+});
+
+const styles = StyleSheet.create({
+  container: {
+    position: 'relative',
+    overflow: 'hidden',
+  },
 });
 
 export default CameraBackground;
